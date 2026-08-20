@@ -27,13 +27,16 @@ app.UseHttpsRedirection();
 
 app.MapControllers();
 
-app.Run();
-        
-
 var summaries = new[]
 {
     "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
 };
+
+app.MapGet("/", () => Results.Ok(new
+{
+    name = "School Management API",
+    endpoints = new[] { "/api/students", "/api/classes", "/api/subjects", "/swagger" }
+}));
 
 app.MapGet("/weatherforecast", () =>
 {
