@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using SchoolManagement.Api.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -10,13 +11,40 @@ builder.Services.AddControllers()
             System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
 
+var renderDatabaseUrl = builder.Configuration["DATABASE_URL"];
+var connectionString = string.IsNullOrWhiteSpace(renderDatabaseUrl)
+    ? builder.Configuration.GetConnectionString("DefaultConnection")
+    : BuildPostgresConnectionString(renderDatabaseUrl);
+
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
+        "Configure DATABASE_URL for Render PostgreSQL or ConnectionStrings__DefaultConnection for SQL Server.");
+}
+
 builder.Services.AddDbContext<SchoolDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    if (!string.IsNullOrWhiteSpace(renderDatabaseUrl))
+    {
+        options.UseNpgsql(connectionString);
+    }
+    else
+    {
+        options.UseSqlServer(connectionString);
+    }
+});
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+if (app.Environment.IsProduction())
+{
+    using var scope = app.Services.CreateScope();
+    var database = scope.ServiceProvider.GetRequiredService<SchoolDbContext>().Database;
+    database.EnsureCreated();
+}
 
 
     app.UseSwagger();
@@ -53,6 +81,29 @@ app.MapGet("/weatherforecast", () =>
 .WithName("GetWeatherForecast");
 
 app.Run();
+
+static string BuildPostgresConnectionString(string databaseUrl)
+{
+    var uri = new Uri(databaseUrl);
+    var userInfo = uri.UserInfo.Split(':', 2);
+
+    if (userInfo.Length != 2 || string.IsNullOrWhiteSpace(uri.Host) || string.IsNullOrWhiteSpace(uri.AbsolutePath))
+    {
+        throw new InvalidOperationException("DATABASE_URL is not a valid PostgreSQL connection URL.");
+    }
+
+    var connectionString = new NpgsqlConnectionStringBuilder
+    {
+        Host = uri.Host,
+        Port = uri.Port > 0 ? uri.Port : 5432,
+        Database = uri.AbsolutePath.TrimStart('/'),
+        Username = Uri.UnescapeDataString(userInfo[0]),
+        Password = Uri.UnescapeDataString(userInfo[1]),
+        SslMode = SslMode.Require
+    };
+
+    return connectionString.ConnectionString;
+}
 
 record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
 {
