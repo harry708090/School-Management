@@ -8,7 +8,7 @@ public class Subject
 
     public int SchoolClassId { get; set; }
 
-    public SchoolClass SchoolClass { get; set; } = null!;
+    public SchoolClass? SchoolClass { get; set; }
 
     public ICollection<Student> Students { get; set; } = new List<Student>();
 }
